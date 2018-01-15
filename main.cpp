@@ -18,6 +18,7 @@ int main(int argc, char* argv[])
     map.initialize(grid);
     map.setStartPos(grid.info.origin.position);
     map.setGoalPos(gPose.pose.position);
+    map.setAgentSize(1);
 
     Theta theta;
     SearchResult result;

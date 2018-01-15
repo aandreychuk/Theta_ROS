@@ -1,79 +1,12 @@
 #include "theta.h"
 
-bool Theta::lineOfSight(int i1, int j1, int i2, int j2, const Map &map)
-{
-    int delta_i = std::abs(i1 - i2);
-    int delta_j = std::abs(j1 - j2);
-    int step_i = (i1 < i2 ? 1 : -1);
-    int step_j = (j1 < j2 ? 1 : -1);
-    int error = 0;
-    int i = i1;
-    int j = j1;
-    if(delta_i == 0) {
-        for(; j != j2; j += step_j)
-            if(map.isObstacle(i, j))
-                return false;
-        return true;
-    }
-    else if(delta_j == 0) {
-        for(; i != i2; i += step_i)
-            if(map.isObstacle(i, j))
-                return false;
-        return true;
-    }
-        int sep_value = delta_i*delta_i + delta_j*delta_j;
-        if(delta_i > delta_j) {
-            for(; i != i2; i += step_i) {
-                if(map.isObstacle(i, j))
-                    return false;
-                if(map.isObstacle(i, j + step_j))
-                    return false;
-                error += delta_j;
-                if(error >= delta_i) {
-                    if(((error << 1) - delta_i - delta_j)*((error << 1) - delta_i - delta_j) < sep_value)
-                        if(map.isObstacle(i + step_i,j))
-                            return false;
-                    if((3*delta_i - ((error << 1) - delta_j))*(3*delta_i - ((error << 1) - delta_j)) < sep_value)
-                        if(map.isObstacle(i, j + 2*step_j))
-                            return false;
-                    j += step_j;
-                    error -= delta_i;
-                }
-            }
-            if(map.isObstacle(i, j))
-                return false;
-        }
-        else {
-            for(; j != j2; j += step_j) {
-                if(map.isObstacle(i, j))
-                    return false;
-                if(map.isObstacle(i + step_i, j))
-                    return false;
-                error += delta_i;
-                if(error >= delta_j) {
-                    if(((error << 1) - delta_i - delta_j)*((error << 1) - delta_i - delta_j) < (delta_i*delta_i + delta_j*delta_j))
-                        if(map.isObstacle(i, j + step_j))
-                            return false;
-                    if((3*delta_j - ((error << 1) - delta_i))*(3*delta_j - ((error << 1) - delta_i)) < (delta_i*delta_i + delta_j*delta_j))
-                        if(map.isObstacle(i + 2*step_i, j))
-                            return false;
-                    i += step_i;
-                    error -= delta_j;
-                }
-            }
-            if(map.isObstacle(i, j))
-                return false;
-    }
-    return true;
-}
-
 Node Theta::resetParent(Node current, Node parent, const Map &map)
 {
     if (parent.parent == nullptr)
         return current;
     if(current == *parent.parent)
         return current;
-    if (lineOfSight(parent.parent->i, parent.parent->j, current.i, current.j, map)) {
+    if (map.checkLine(parent.parent->i, parent.parent->j, current.i, current.j)) {
         current.g = parent.parent->g + distance(parent.parent->i, parent.parent->j, current.i, current.j);
         current.parent = parent.parent;
         return current;
@@ -88,12 +21,12 @@ double Theta::distance(int i1, int j1, int i2, int j2)
 
 SearchResult Theta::startSearch(const Map &map)
 {
-    open.resize(map.height);
+    open.resize(map.getHeight());
     Node curNode;
-    curNode.i = map.start_i;
-    curNode.j = map.start_j;
+    curNode.i = map.getStart_i();
+    curNode.j = map.getStart_j();
     curNode.g = 0;
-    curNode.H = distance(curNode.i, curNode.j, map.goal_i, map.goal_j);
+    curNode.H = distance(curNode.i, curNode.j, map.getGoal_i(), map.getGoal_j());
     curNode.F = curNode.H;
     curNode.parent = nullptr;
     addOpen(curNode);
@@ -101,20 +34,20 @@ SearchResult Theta::startSearch(const Map &map)
     bool pathfound = false;
     while (openSize > 0) {
         curNode = findMin();
-        close.insert({curNode.i * map.width + curNode.j, curNode});
+        close.insert({curNode.i * map.getWidth() + curNode.j, curNode});
         closeSize++;
         open[curNode.i].pop_front();
         openSize--;
-        if (curNode.i == map.goal_i && curNode.j == map.goal_j) {
+        if (curNode.i == map.getGoal_i() && curNode.j == map.getGoal_j()) {
             pathfound = true;
             break;
         }
         std::list<Node> successors = findSuccessors(curNode, map);
         std::list<Node>::iterator it = successors.begin();
-        auto parent = &(close.find(curNode.i * map.width + curNode.j)->second);
+        auto parent = &(close.find(curNode.i * map.getWidth() + curNode.j)->second);
         while (it != successors.end()) {
             it->parent = parent;
-            it->H = distance(it->i, it->j, map.goal_i, map.goal_j);
+            it->H = distance(it->i, it->j, map.getGoal_i(), map.getGoal_j());
             *it = resetParent(*it, *it->parent, map);
             it->F = it->g + it->H;
             addOpen(*it);
@@ -153,8 +86,8 @@ std::list<Node> Theta::findSuccessors(Node curNode, const Map &map)
     std::list<Node> successors;
     for (int i = -1; i <= +1; i++)
         for (int j = -1; j <= +1; j++)
-            if ((i != 0 || j != 0) && !map.isObstacle(curNode.i + i, curNode.j + j)) {
-                if (close.find((curNode.i + i) * map.width + curNode.j + j) == close.end()) {
+            if ((i != 0 || j != 0) && map.checkTraversability(curNode.i + i, curNode.j + j)) {
+                if (close.find((curNode.i + i) * map.getWidth() + curNode.j + j) == close.end()) {
                     newNode.i = curNode.i + i;
                     newNode.j = curNode.j + j;
                     if(i == 0 || j == 0)
@@ -183,8 +116,8 @@ void Theta::addOpen(Node newNode)
         if (!posFound && iter->F >= newNode.F)
             if (iter->F == newNode.F) {
                 if(newNode.g >= iter->g){
-                    pos=iter;
-                    posFound=true;
+                    pos = iter;
+                    posFound = true;
                 }
             }
             else {
